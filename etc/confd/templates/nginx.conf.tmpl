@@ -1,0 +1,66 @@
+user  nginx;
+worker_processes  1;
+
+
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+
+events {
+    worker_connections  1024;
+}
+
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    #gzip  on;
+
+    upstream sync_gateway {
+        {{range getvs "/couchbase.com/sync-gw-node-state/*"}}
+            server {{.}};
+        {{end}}
+    }
+
+    # HTTP server
+    #
+    server {
+        listen 80;
+        server_name 192.168.1.3;
+        client_max_body_size 20m;
+        location / {
+            proxy_pass              http://sync_gateway;
+            proxy_pass_header       Accept;
+            proxy_pass_header       Server;
+            proxy_http_version      1.1;
+            keepalive_requests      1000;
+            keepalive_timeout       360s;
+            proxy_read_timeout      360s;
+            # allows for websockets
+            proxy_set_header        Upgrade $http_upgrade;
+            proxy_set_header        Connection "upgrade";
+            # from confd demo, X-Handler header tells which server handled request
+            proxy_redirect off;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            add_header  X-Handler  $upstream_addr;
+        }
+    }
+
+    include /etc/nginx/conf.d/*.conf;
+}

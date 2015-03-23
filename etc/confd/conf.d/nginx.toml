@@ -1,0 +1,7 @@
+[template]
+src = "nginx.conf.tmpl"
+dest = "/etc/nginx/nginx.conf"
+keys = [
+    "/couchbase.com/sync-gw-node-state",
+]
+reload_cmd = "/bin/bash /etc/confd/reload_nginx.sh"
